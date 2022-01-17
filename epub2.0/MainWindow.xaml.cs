@@ -2,10 +2,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -30,38 +32,52 @@ namespace epub2._0
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
         }
-        String Rstring;
         
         
          void button1_Click(object sender, EventArgs e)
          {
-            Rstring = textBox1.Text;
             //textBlock1.Text = Rstring;
             List<string> titleList = new List<string>();
             List<string> hrefList = new List<string>();
             List<string> contentList = new List<string>();
             File.WriteAllText(@"C:\Users\97489\Desktop\test.txt", "");
 
-            var html = @"https://www.uukanshu.com/b/167/";
+            var html = @textBox1.Text;
 
-            HttpClient client = new HttpClient();
+            // HttpClient client = new HttpClient();
             
-            var Task = client.GetStringAsync(html);
-            Task.Wait();
-            var result = Task.Result;
+            // var Task = client.GetStringAsync(html);
+            // Task.Wait();
+            // var result = Task.Result;
 
             HtmlWeb web = new HtmlWeb();
 
             var htmlDoc = web.Load(html);
 
             var nodes = htmlDoc.DocumentNode.SelectNodes("//body/div[@class='xiaoshuo_content clear']/div[@class='zhangjie clear']/ul[@id='chapterList']/li/a");
+            var title = htmlDoc.DocumentNode.SelectSingleNode("//body/div[@class='xiaoshuo_content clear']/dl[@class='jieshao']/dd[@class='jieshao_content']/h1/a").InnerText;
+            var author = htmlDoc.DocumentNode.SelectSingleNode("//body/div[@class='xiaoshuo_content clear']/dl[@class='jieshao']/dd[@class='jieshao_content']/h2/a").InnerText;
+
+            //Now Create all of the directories
+            var sourcePath = @"C:\Users\97489\Desktop\text";
+            var targetPath = @"C:\Users\97489\Desktop\targetPath";
+            foreach (string dirPath in Directory.GetDirectories(sourcePath, "*", SearchOption.AllDirectories))
+            {
+                Directory.CreateDirectory(dirPath.Replace(sourcePath, targetPath));
+            }
+
+            //Copy all the files & Replaces any files with the same name
+            foreach (string newPath in Directory.GetFiles(sourcePath, "*.*", SearchOption.AllDirectories))
+            {
+                File.Copy(newPath, newPath.Replace(sourcePath, targetPath), true);
+            }
 
             for (int i = 0; i < nodes.Count; i++)
             {
                 var node = nodes[i];
                 var titleContent = node.Attributes["title"].Value;
                 var hrefContent = node.Attributes["href"].Value;
-                titleList.Add(titleContent);
+                titleList.Add(titleContent); // concurrent bag
                 hrefList.Add(hrefContent);
 
                 var newHTML = "https://www.uukanshu.com" + node.Attributes["href"].Value;
@@ -77,14 +93,41 @@ namespace epub2._0
                 //string readText = File.ReadAllText(@"C:\Users\97489\Desktop\test.txt");
 
             }
+            int n = contentList.Count;
 
-            for (int i = contentList.Count-1;i > 0; i--)
+            for (int i = n-1;i >= 0; i--)
             {
                 File.AppendAllText(@"C:\Users\97489\Desktop\test.txt", titleList[i] + Environment.NewLine + contentList[i] + Environment.NewLine);
+                var path = @"C:\Users\97489\Desktop\targetPath\OEBPS\ch" + (n - i).ToString() + ".html";
+
+                File.Copy(@"C:\Users\97489\Desktop\text\OEBPS\ch1.html", path, true);
+
+                File.WriteAllText(path, Regex.Replace(File.ReadAllText(path), "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", contentList[i]));
+                File.WriteAllText(path, Regex.Replace(File.ReadAllText(path), "Xtitle", titleList[i]));
+                // string readText = File.ReadAllText(path);
             }
 
-            textBlock1.Text = "Download finished";
+            string manifest = "";
+            string spine = "";
+            string navMap = "";
+            for (int i = 0; i < contentList.Count; i++)
+            {
+                manifest = manifest + "<item href=\"ch" + (i+1).ToString() + ".html\" id=\"ch" + (i + 1).ToString() + "\" media-type=\"application/xhtml+xml\"/>" + Environment.NewLine;
+                spine = spine + "<itemref idref=\"ch" + (i + 1).ToString() + "\"/>" + Environment.NewLine;
+                navMap = navMap + "<navPoint id=\"ch" + (i + 1).ToString() + "\" playOrder=\"" + (i + 1).ToString() + "\"><navLabel><text>" + titleList[n-i-1] + "</text></navLabel><content src=\"ch" + (i + 1).ToString() + ".html\"/></navPoint>" + Environment.NewLine;
+            }
+            var opfPath = @"C:\Users\97489\Desktop\targetPath\OEBPS\content.opf";
+            var ncxPath = @"C:\Users\97489\Desktop\targetPath\OEBPS\toc.ncx";
+            File.WriteAllText(opfPath, Regex.Replace(File.ReadAllText(opfPath), "XmanifestX", manifest));
+            File.WriteAllText(opfPath, Regex.Replace(File.ReadAllText(opfPath), "<itemref idref=\"ch1\"/>", spine));
+            File.WriteAllText(opfPath, Regex.Replace(File.ReadAllText(opfPath), "XtitleX", title));
+            File.WriteAllText(opfPath, Regex.Replace(File.ReadAllText(opfPath), "XauthorX", author));
+            File.WriteAllText(ncxPath, Regex.Replace(File.ReadAllText(ncxPath), "XnavMapX", navMap));
+            File.WriteAllText(ncxPath, Regex.Replace(File.ReadAllText(ncxPath), "XtitleX", title));
 
+            textBlock1.Text = "Download finished";
+            var epubPath = @"C:\Users\97489\Desktop\" + title + ".epub";
+            ZipFile.CreateFromDirectory(targetPath, epubPath);
 
         }
 
