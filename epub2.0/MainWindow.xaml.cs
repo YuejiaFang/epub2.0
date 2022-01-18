@@ -1,5 +1,6 @@
 ﻿using HtmlAgilityPack;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -37,15 +38,12 @@ namespace epub2._0
          void button1_Click(object sender, EventArgs e)
          {
             //textBlock1.Text = Rstring;
-            List<string> titleList = new List<string>();
-            List<string> hrefList = new List<string>();
-            List<string> contentList = new List<string>();
             File.WriteAllText(@"C:\Users\97489\Desktop\test.txt", "");
 
             var html = @textBox1.Text;
 
             // HttpClient client = new HttpClient();
-            
+
             // var Task = client.GetStringAsync(html);
             // Task.Wait();
             // var result = Task.Result;
@@ -72,13 +70,17 @@ namespace epub2._0
                 File.Copy(newPath, newPath.Replace(sourcePath, targetPath), true);
             }
 
-            for (int i = 0; i < nodes.Count; i++)
-            {
+            int numNodes = nodes.Count;
+            string[] titleList = new string[numNodes];
+            string[] contentList = new string[numNodes];
+
+
+            Parallel.For(0, numNodes, i =>
+            {   
                 var node = nodes[i];
                 var titleContent = node.Attributes["title"].Value;
                 var hrefContent = node.Attributes["href"].Value;
-                titleList.Add(titleContent); // concurrent bag
-                hrefList.Add(hrefContent);
+                titleList[i] = titleContent; // concurrent bag
 
                 var newHTML = "https://www.uukanshu.com" + node.Attributes["href"].Value;
                 HtmlWeb newWeb = new HtmlWeb();
@@ -88,12 +90,12 @@ namespace epub2._0
                 var newNode = newHtmlDoc.DocumentNode.SelectSingleNode("//body/div[@class='zhengwen_box']/div[@class='box_left']/div[@class='w_main']/div[@class='contentbox']/div[@id='contentbox']");
                 var chapterContent = newNode.InnerText;
                 chapterContent = chapterContent.Replace("&nbsp;", "\t");
-                contentList.Add(chapterContent);
+                contentList[i] = chapterContent;
                 
                 //string readText = File.ReadAllText(@"C:\Users\97489\Desktop\test.txt");
 
-            }
-            int n = contentList.Count;
+            });
+            int n = numNodes;
 
             for (int i = n-1;i >= 0; i--)
             {
@@ -110,7 +112,7 @@ namespace epub2._0
             string manifest = "";
             string spine = "";
             string navMap = "";
-            for (int i = 0; i < contentList.Count; i++)
+            for (int i = 0; i < numNodes; i++)
             {
                 manifest = manifest + "<item href=\"ch" + (i+1).ToString() + ".html\" id=\"ch" + (i + 1).ToString() + "\" media-type=\"application/xhtml+xml\"/>" + Environment.NewLine;
                 spine = spine + "<itemref idref=\"ch" + (i + 1).ToString() + "\"/>" + Environment.NewLine;
